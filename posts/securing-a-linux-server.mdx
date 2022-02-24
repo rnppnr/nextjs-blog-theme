@@ -1,0 +1,136 @@
+---
+title: Securing a linux server.
+description: "
+Not long after finishing setting up a new server you see from the logs that it is constantly 
+being attacked. If you are not convinced of, or wish to see, how frequent these attacks are take 
+a look at the auth.log file that is usually located in /var/log. There are several very simple 
+steps that can make it almost impossible for the server to be compromised. Once you complete the 
+following steps you will have:
+"
+date: Feb 24 2022
+---
+
++    Created a user account that has sudo privileges. This account will be then used to do any further server maintenance
++    Installed Fail2ban to limit malicious server attacks
++    Prevented the root user from logging in
++    Changed the port ssh listens on
++    Installed ufw a simple command line tool to manage iptables
++    Created a ssh key and set the server up to only allow logins with ssh keys
+
+Our first step is to create a user that will have sudo privileges. It is this user that will be 
+used to login to the server to do any maintenance. Later the root user will be prevented from 
+logging in. To do this we run the following command as the root user to create a new user and 
+give them a password.
+## 
+    useradd -m -d /home/USERNAME -s /bin/bash USERNAME
+    passwd USERNAME
+    usermod -aG sudo USERNAME
+
+You can now logout of the server and log in with the user you created in the previous step. To 
+make sure all is working as it should you can now run an update and upgrade on the server to make 
+sure the latest patches are applied. When you hit return for the first command you should get a 
+password prompt type in the password you used previously when setting up the account.    
+
+##
+    sudo apt-get update
+    sudo apt-get upgrade
+
+As you’ll be using nano you can run the following command to check and install it.
+
+##
+    sudo apt-get install nano
+
+[Fail2ban](https://www.fail2ban.org/wiki/index.php/Main_Page) scans the logs files and bans any 
+ip address that appears to be acting maliciously. The next step is to install fail2ban.
+
+##
+    sudo apt-get install fail2ban
+
+The default settings will protect the ssh port and ban what it considers malicious attackes for 
+10 minutes after 6 tries in the last 10 minutes. If you want to check that Fail2ban is doing it’s 
+job leave the server for thirty minutes or so that should be enough time for an ip address to be 
+banned. If you are satisfied that fail2ban is working you can now disable the root user from logging 
+into the server. Run the following command.    
+
+##
+    sudo nano /etc/ssh/sshd_config
+
+Change PermitRootLogin yes to PermitRootLogin no. Save the file then run the following command
+
+##
+    sudo service ssh restart
+
+Leave the current terminal open and open a new one. If you try logging in as root you should get an error 
+and cannot log in. Checking the /var/log/auth.log file should show that the root user was refused a login.
+
+You will now install [Uncomplicated Firewall.](https://launchpad.net/ufw) This will only allow traffic on the 
+ports you open. In your original terminal run the following commands.
+
+##
+    sudo apt-get install ufw
+    sudo ufw –help
+
+The help screen shows how to use the program. You now need to allow some ports before enabling the firewall 
+or you will get locked out of the server.
+
+You will now change the port that ssh is listening on.
+
+##
+    sudo nano /etc/ssh/sshd_config
+
+There will be a setting for the Port. If you have not changed this it should be 22.  You can change this to something 
+like 2222. Save the file and run the following command.
+
+##
+    sudo service ssh restart
+
+Again check you can log in using a new terminal.
+
+**DO NOT DO THIS UNTIL YOU KNOW WHAT PORT SSH IS LISTENING ON**
+
+##
+    sudo ufw allow 2222 (or whatever port you used in the sshd_config file)
+    sudo ufw allow http (port 80 by default)
+    sudo ufw allow https (port 443 by default)
+    sudo ufw enable
+
+You will need to update the Fail2ban config file to match the port you are using for ssh.
+
+##
+    sudo nano /etc/fail2ban/jail.conf
+
+Change the ssh port to the port you put in the sshd_config file. Then run the following command.
+
+##
+    sudo fail2ban-client reload
+
+Following these steps has made your server more secure.
+
+The next step will make it impossible for anyone to logon without a ssh key installed on the server. 
+For this you will need to download [PuTTY](https://putty.org/) and create your ssh key. There is a tutorial 
+for doing this [here](https://www.ssh.com/ssh/putty/windows/puttygen). Once you have your ssh key you can install it on your server to do this you need to create 
+a .ssh directory in the home directory of the user you created at the start.
+
+##
+    mkdir /home/USERNAME/.ssh
+
+Upload the ssh key you created using PuTTY to this directory.
+
+##
+    sudo nano /etc/ssh/sshd_config
+    PermitRootLogin no
+    PubkeyAuthentication yes
+    PermitEmptyPasswords no
+    ChallengeResponseAuthentication no
+    PasswordAuthentication yes
+
+Make sure PasswordAuthentication is set to yes. This is so you can log in with a password while you 
+are testing the setup of the ssh key. Once you have made these changes run the following command.
+
+##
+    sudo service ssh restart
+
+Now open a new terminal and login. If the password prompt appears then make sure you have Pageant running 
+and your private keys loaded. Pageant will be in the same directory as PuTTY. Once you have logged in using 
+your ssh key you can edit the sshd_config file and set PasswordAuthenticaiton to no.    
+
